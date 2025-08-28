@@ -1,0 +1,95 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            arch: amd64
+            name: linux-amd64
+          - os: ubuntu-22.04-arm
+            arch: arm64
+            name: linux-arm64
+          - os: macos-14
+            arch: universal
+            name: macos-universal
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y cmake clang
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install llvm
+
+      - name: Configure
+        run: |
+          if [ "${{ matrix.os }}" == "macos-14" ]; then
+            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
+          else
+            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          fi
+        shell: bash
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Strip binary
+        run: strip build/mur
+        shell: bash
+
+      - name: Package
+        run: |
+          mkdir -p packages
+          cp build/mur mur
+          tar -czf packages/mur-${{ matrix.name }}.tar.gz mur
+          zip packages/mur-${{ matrix.name }}.zip mur
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: packages/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Flatten artifacts
+        run: |
+          find artifacts/ -name "*.tar.gz" -o -name "*.zip" | xargs -I {} mv {} artifacts/
+          rm -rf artifacts/*/
+
+      - name: Set node
+        uses: actions/setup-node@v4
+        with:
+          registry-url: https://registry.npmjs.org/
+          node-version: lts/*
+
+      - run: npx changelogithub --contributors --assets "artifacts/*"
+        env:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}

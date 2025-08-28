@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: sudo apt-get update && sudo apt-get install -y cmake clang clang-tidy clang-format
+
+    - name: Configure
+      run: cmake -S . -B build
+
+    - name: Build
+      run: cmake --build build
+
+    - name: Test
+      run: cd build && ctest
+
+    - name: Format check
+      run: clang-format --dry-run --Werror source/*.cpp include/**/*.hpp test/**/*.cpp test/**/*.hpp
+
+    - name: Tidy check
+      run: clang-tidy source/*.cpp -- -I include
