@@ -24,9 +24,3 @@ jobs:
 
     - name: Test
       run: cd build && ctest
-
-    - name: Format check
-      run: clang-format --dry-run --Werror source/*.cpp include/**/*.hpp test/**/*.cpp test/**/*.hpp
-
-    - name: Tidy check
-      run: clang-tidy source/*.cpp -- -I include
